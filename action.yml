@@ -26,11 +26,11 @@ inputs:
   actor:
     description: 'User deploying (defaults to github.actor)'
     required: false
-    default: ${{ github.actor }}
+    default: ''
   run_id:
     description: 'Run ID for tracking (defaults to github.run_id)'
     required: false
-    default: ${{ github.run_id }}
+    default: ''
   detect_gitops:
     description: 'Auto-detect GitOps mode from manifests'
     required: false
@@ -87,8 +87,11 @@ runs:
     - name: Update kustomize manifests
       shell: bash
       working-directory: ${{ inputs.working_directory }}/${{ inputs.overlay_dir }}
+      env:
+        DEPLOY_ACTOR: ${{ inputs.actor || github.actor }}
+        DEPLOY_RUN_ID: ${{ inputs.run_id || github.run_id }}
       run: |
-        echo "=� Updating kustomize manifests..."
+        echo "=> Updating kustomize manifests..."
         
         # Set image
         kustomize edit set image "${{ inputs.image }}"
@@ -99,12 +102,14 @@ runs:
         sed -i.bak "s/app.kubernetes.io\/version:.*/app.kubernetes.io\/version: $TAG/g" kustomization.yaml && rm kustomization.yaml.bak || true
         
         # Set annotations
-        kustomize edit set annotation "last-deployed-by:${{ inputs.actor }}"
+        ACTOR="${DEPLOY_ACTOR:-$GITHUB_ACTOR}"
+        RUN_ID="${DEPLOY_RUN_ID:-$GITHUB_RUN_ID}"
+        kustomize edit set annotation "last-deployed-by:$ACTOR"
         kustomize edit set annotation "deployment-timestamp:$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-        kustomize edit set annotation "deployment-id:${{ inputs.run_id }}"
+        kustomize edit set annotation "deployment-id:$RUN_ID"
         kustomize edit set annotation "build.run.url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
         
-        echo " Manifests updated"
+        echo " Manifests updated"
     
     - name: Extract metadata
       id: extract
@@ -158,13 +163,13 @@ runs:
         
         if [ "$MANAGED_BY" = "argocd" ]; then
           echo "mode=gitops" >> $GITHUB_OUTPUT
-          echo " GitOps mode detected (ArgoCD)"
+          echo " GitOps mode detected (ArgoCD)"
         elif [ "$MANAGED_BY" = "flux" ]; then
           echo "mode=gitops" >> $GITHUB_OUTPUT
-          echo " GitOps mode detected (Flux)"
+          echo " GitOps mode detected (Flux)"
         else
           echo "mode=kubectl" >> $GITHUB_OUTPUT
-          echo "=� Direct deployment mode (kubectl)"
+          echo "=> Direct deployment mode (kubectl)"
         fi
     
     - name: Set deployment mode
@@ -173,7 +178,7 @@ runs:
       run: |
         if [ "${{ inputs.force_mode }}" != "auto" ]; then
           echo "mode=${{ inputs.force_mode }}" >> $GITHUB_OUTPUT
-          echo "<� Using forced mode: ${{ inputs.force_mode }}"
+          echo "<> Using forced mode: ${{ inputs.force_mode }}"
         else
           echo "mode=${{ steps.detect.outputs.mode }}" >> $GITHUB_OUTPUT
         fi
@@ -196,7 +201,7 @@ runs:
       shell: bash
       run: |
         NAMESPACE="${{ steps.extract.outputs.namespace }}"
-        echo "=� Ensuring namespace exists: $NAMESPACE"
+        echo "=> Ensuring namespace exists: $NAMESPACE"
         kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
     
     - name: Apply with kubectl
@@ -207,21 +212,21 @@ runs:
         NAMESPACE="${{ steps.extract.outputs.namespace }}"
         FULLNAME="${{ steps.extract.outputs.fullname }}"
         
-        echo "=� Deploying ${{ inputs.service_name }} to ${{ inputs.environment }}..."
+        echo "=> Deploying ${{ inputs.service_name }} to ${{ inputs.environment }}..."
         
         # Apply manifests
         kustomize build "${{ inputs.overlay_dir }}" | kubectl apply -n "$NAMESPACE" -f -
         
         # Wait for rollout
-        echo "� Waiting for deployment..."
+        echo "> Waiting for deployment..."
         if kubectl rollout status deployment/"$FULLNAME" -n "$NAMESPACE" --timeout="${{ inputs.wait_timeout }}s"; then
-          echo " Deployment successful"
+          echo " Deployment successful"
         else
           echo "::warning::Deployment may not be fully ready"
           kubectl describe deployment "$FULLNAME" -n "$NAMESPACE" | tail -20
         fi
         
         # Show status
-        echo "=� Deployment status:"
+        echo "=> Deployment status:"
         kubectl get deployment "$FULLNAME" -n "$NAMESPACE" -o wide || true
         kubectl get pods -l "app=${{ inputs.service_name }}" -n "$NAMESPACE" || true
