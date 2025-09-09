@@ -57,13 +57,10 @@ outputs:
     value: ${{ steps.detect.outputs.mode }}
   namespace:
     description: 'Kubernetes namespace'
-    value: ${{ steps.extract.outputs.namespace }}
-  fullname:
-    description: 'Full deployment name (with any prefixes)'
-    value: ${{ steps.extract.outputs.fullname }}
+    value: ${{ steps.inspect.outputs.namespace }}
   deployment:
     description: 'Primary deployment name'
-    value: ${{ steps.extract.outputs.deployment }}
+    value: ${{ steps.inspect.outputs.primary_deployment }}
   managed_by:
     description: 'Value of managed-by label if found'
     value: ${{ steps.detect.outputs.managed_by }}
@@ -85,67 +82,22 @@ runs:
         fi
     
     - name: Update kustomize manifests
-      shell: bash
-      working-directory: ${{ inputs.working_directory }}/${{ inputs.overlay_dir }}
-      env:
-        DEPLOY_ACTOR: ${{ inputs.actor || github.actor }}
-        DEPLOY_RUN_ID: ${{ inputs.run_id || github.run_id }}
-      run: |
-        echo "=> Updating kustomize manifests..."
-        
-        # Set image
-        kustomize edit set image "${{ inputs.image }}"
-        
-        # Update version label
-        TAG="${{ inputs.image }}"
-        TAG="${TAG##*:}"  # Extract tag after last colon
-        sed -i.bak "s/app.kubernetes.io\/version:.*/app.kubernetes.io\/version: $TAG/g" kustomization.yaml && rm kustomization.yaml.bak || true
-        
-        # Set annotations
-        ACTOR="${DEPLOY_ACTOR:-$GITHUB_ACTOR}"
-        RUN_ID="${DEPLOY_RUN_ID:-$GITHUB_RUN_ID}"
-        kustomize edit set annotation "last-deployed-by:$ACTOR"
-        kustomize edit set annotation "deployment-timestamp:$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-        kustomize edit set annotation "deployment-id:$RUN_ID"
-        kustomize edit set annotation "build.run.url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-        
-        echo " Manifests updated"
+      uses: KoalaOps/kustomize-edit@v1
+      with:
+        overlay_dir: ${{ inputs.working_directory }}/${{ inputs.overlay_dir }}
+        image: ${{ inputs.image }}
+        version_label: ${{ inputs.image }}
+        annotations: |
+          last-deployed-by=${{ inputs.actor || github.actor }}
+          deployment-timestamp=${{ github.event.head_commit.timestamp || github.run_id }}
+          deployment-id=${{ inputs.run_id || github.run_id }}
+          build.run.url=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
     
-    - name: Extract metadata
-      id: extract
-      shell: bash
-      working-directory: ${{ inputs.working_directory }}/${{ inputs.overlay_dir }}
-      run: |
-        echo "=
- Extracting metadata from manifests..."
-        
-        # Build manifests
-        BUILD_RESULT=$(kustomize build)
-        
-        # Extract namespace
-        NAMESPACE=$(echo "$BUILD_RESULT" | grep -m1 "^\s*namespace:" | sed 's/.*namespace:\s*//' | tr -d '[:space:]')
-        if [ -z "$NAMESPACE" ]; then
-          NAMESPACE="${{ inputs.environment }}"
-        fi
-        echo "namespace=$NAMESPACE" >> $GITHUB_OUTPUT
-        echo "Namespace: $NAMESPACE"
-        
-        # Extract name prefix if exists
-        NAME_PREFIX=$(grep "^namePrefix:" kustomization.yaml 2>/dev/null | sed 's/.*namePrefix:\s*//' | tr -d '[:space:]' || echo "")
-        
-        # Determine full name
-        if [ -n "$NAME_PREFIX" ]; then
-          FULLNAME="${NAME_PREFIX}${{ inputs.service_name }}"
-        else
-          FULLNAME="${{ inputs.service_name }}"
-        fi
-        echo "fullname=$FULLNAME" >> $GITHUB_OUTPUT
-        echo "Full name: $FULLNAME"
-        
-        # Extract primary deployment
-        DEPLOYMENT=$(echo "$BUILD_RESULT" | grep -B1 "kind: Deployment" | grep "name:" | head -1 | sed 's/.*name:\s*//' | tr -d '[:space:]' || echo "$FULLNAME")
-        echo "deployment=$DEPLOYMENT" >> $GITHUB_OUTPUT
-        echo "Deployment: $DEPLOYMENT"
+    - name: Inspect kustomization
+      id: inspect
+      uses: KoalaOps/kustomize-inspect@v1
+      with:
+        overlay_dir: ${{ inputs.working_directory }}/${{ inputs.overlay_dir }}
     
     - name: Detect GitOps mode
       id: detect
@@ -196,37 +148,12 @@ runs:
         commit_user_email: actions@github.com
     
     # Kubectl path: direct apply
-    - name: Create namespace
-      if: steps.mode.outputs.mode == 'kubectl' && inputs.create_namespace == 'true'
-      shell: bash
-      run: |
-        NAMESPACE="${{ steps.extract.outputs.namespace }}"
-        echo "=> Ensuring namespace exists: $NAMESPACE"
-        kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
-    
     - name: Apply with kubectl
       if: steps.mode.outputs.mode == 'kubectl'
-      shell: bash
-      working-directory: ${{ inputs.working_directory }}
-      run: |
-        NAMESPACE="${{ steps.extract.outputs.namespace }}"
-        FULLNAME="${{ steps.extract.outputs.fullname }}"
-        
-        echo "=> Deploying ${{ inputs.service_name }} to ${{ inputs.environment }}..."
-        
-        # Apply manifests
-        kustomize build "${{ inputs.overlay_dir }}" | kubectl apply -n "$NAMESPACE" -f -
-        
-        # Wait for rollout
-        echo "> Waiting for deployment..."
-        if kubectl rollout status deployment/"$FULLNAME" -n "$NAMESPACE" --timeout="${{ inputs.wait_timeout }}s"; then
-          echo " Deployment successful"
-        else
-          echo "::warning::Deployment may not be fully ready"
-          kubectl describe deployment "$FULLNAME" -n "$NAMESPACE" | tail -20
-        fi
-        
-        # Show status
-        echo "=> Deployment status:"
-        kubectl get deployment "$FULLNAME" -n "$NAMESPACE" -o wide || true
-        kubectl get pods -l "app=${{ inputs.service_name }}" -n "$NAMESPACE" || true
+      uses: KoalaOps/kustomize-apply@v1
+      with:
+        overlay_dir: ${{ inputs.working_directory }}/${{ inputs.overlay_dir }}
+        namespace: ${{ steps.inspect.outputs.namespace }}
+        workloads_json: ${{ steps.inspect.outputs.workloads_json }}
+        wait: 'true'
+        wait_timeout: ${{ inputs.wait_timeout }}

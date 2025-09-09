@@ -45,24 +45,28 @@ High-level deployment action that handles both GitOps (ArgoCD) and direct kubect
 |--------|-------------|
 | `mode` | Deployment mode used (gitops or kubectl) |
 | `namespace` | Kubernetes namespace |
-| `fullname` | Full deployment name (with any prefixes) |
 | `deployment` | Primary deployment name |
 | `managed_by` | Value of managed-by label if found |
 
 ## How It Works
 
-### 1. Detection Phase
+### 1. Update Phase
+- Uses kustomize-edit to set image tag
+- Updates version label
+- Adds deployment metadata (last-deployed-by, deployment-id, etc.)
+
+### 2. Inspection Phase
+- Uses kustomize-inspect to extract namespace and workloads
+- Gets primary deployment name
+- Validates kustomization builds successfully
+
+### 3. Detection Phase
 ```yaml
 # Checks for ArgoCD management
 app.kubernetes.io/managed-by: argocd
 ```
 
-### 2. Update Phase
-- Sets image tag in kustomization.yaml
-- Updates version label
-- Adds deployment metadata
-
-### 3. Deploy Phase
+### 4. Deploy Phase
 
 **GitOps Mode:**
 - Commits changes to git
