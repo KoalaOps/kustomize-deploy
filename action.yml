@@ -1,4 +1,4 @@
-name: 'Kustomize Deploy'
+name: 'Kustomize Smart Deploy'
 description: 'Complete kustomize deployment with GitOps detection and metadata extraction'
 author: 'KoalaOps'
 
