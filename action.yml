@@ -61,6 +61,9 @@ outputs:
   deployment:
     description: 'Primary deployment name'
     value: ${{ steps.inspect.outputs.primary_deployment }}
+  workloads_json:
+    description: 'JSON array of deployed workloads: [{kind,name,namespace}]'
+    value: ${{ steps.inspect.outputs.workloads_json }}
   managed_by:
     description: 'Value of managed-by label if found'
     value: ${{ steps.detect.outputs.managed_by }}
