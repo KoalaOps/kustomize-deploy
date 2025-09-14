@@ -18,7 +18,10 @@ inputs:
     description: 'Service name'
     required: true
   image:
-    description: 'Full image with tag (e.g., myregistry/myapp:v1.2.3)'
+    description: 'Container image name/repository (e.g., ghcr.io/koalaops/myapp)'
+    required: true
+  tag:
+    description: 'Image tag (e.g., v1.2.3, latest, main-20240915)'
     required: true
   environment:
     description: 'Environment name'
@@ -89,7 +92,8 @@ runs:
       with:
         overlay_dir: ${{ inputs.working_directory }}/${{ inputs.overlay_dir }}
         image: ${{ inputs.image }}
-        version_label: ${{ inputs.image }}
+        tag: ${{ inputs.tag }}
+        version_label: ${{ inputs.tag }}
         annotations: |
           last-deployed-by=${{ inputs.actor || github.actor }}
           deployment-timestamp=${{ github.event.head_commit.timestamp || github.run_id }}
