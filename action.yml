@@ -111,19 +111,19 @@ runs:
         echo "Detecting deployment mode..."
         
         BUILD_RESULT=$(kustomize build)
-        MANAGED_BY=$(echo "$BUILD_RESULT" | grep "app.kubernetes.io/managed-by:" | head -n1 | sed 's/.*app.kubernetes.io\/managed-by:\s*//' | tr -d '[:space:]')
+        MANAGED_BY=$(echo "$BUILD_RESULT" | grep "app.kubernetes.io/managed-by:" | head -n1 | sed 's/.*app.kubernetes.io\/managed-by:\s*//' | tr -d '[:space:]' || true)
         
         echo "managed_by=$MANAGED_BY" >> $GITHUB_OUTPUT
         
         if [ "$MANAGED_BY" = "argocd" ]; then
           echo "mode=gitops" >> $GITHUB_OUTPUT
-          echo " GitOps mode detected (ArgoCD)"
+          echo "✓ GitOps mode detected (ArgoCD)"
         elif [ "$MANAGED_BY" = "flux" ]; then
           echo "mode=gitops" >> $GITHUB_OUTPUT
-          echo " GitOps mode detected (Flux)"
+          echo "✓ GitOps mode detected (Flux)"
         else
           echo "mode=kubectl" >> $GITHUB_OUTPUT
-          echo "=> Direct deployment mode (kubectl)"
+          echo "✓ Direct deployment mode (kubectl)"
         fi
     
     - name: Set deployment mode
