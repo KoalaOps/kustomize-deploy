@@ -5,7 +5,7 @@ High-level deployment action that handles both GitOps (ArgoCD) and direct kubect
 ## Features
 
 - 🔍 **Auto-detects GitOps** - Checks for ArgoCD management
-- 📝 **Updates manifests** - Sets image tags and labels
+- 📝 **Updates manifests** - Sets image tags, labels, and environment variables
 - 🚀 **Dual mode** - GitOps commit or kubectl apply
 - ⏳ **Wait for rollout** - Monitors deployment status
 - 🎯 **Namespace management** - Creates namespaces as needed
@@ -38,6 +38,7 @@ High-level deployment action that handles both GitOps (ArgoCD) and direct kubect
 | `commit_message` | Commit message for GitOps | ❌ | auto |
 | `create_namespace` | Create namespace if it does not exist | ❌ | `true` |
 | `wait_timeout` | Timeout for waiting on deployments (seconds) | ❌ | `120` |
+| `env_patches` | Environment file patches (JSON format) | ❌ | - |
 
 ## Outputs
 
@@ -54,6 +55,7 @@ High-level deployment action that handles both GitOps (ArgoCD) and direct kubect
 - Uses kustomize-edit to set image tag
 - Updates version label
 - Adds deployment metadata (last-deployed-by, deployment-id, etc.)
+- Patches environment variables in config files (if env_patches provided)
 
 ### 2. Inspection Phase
 - Uses kustomize-inspect to extract namespace and workloads
@@ -125,6 +127,24 @@ app.kubernetes.io/managed-by: argocd
     image: myregistry.io/api:feature-123
     environment: feature-123
     create_namespace: true
+```
+
+### With environment variable patches
+```yaml
+- name: Deploy with env patches
+  uses: KoalaOps/kustomize-deploy@v1
+  with:
+    overlay_dir: deploy/overlays/production
+    service_name: backend
+    image: myregistry.io/backend:v1.2.3
+    environment: production
+    env_patches: |
+      {
+        "container.env": {
+          "SENTRY_RELEASE": "v1.2.3",
+          "BUILD_ID": "${{ github.run_id }}"
+        }
+      }
 ```
 
 ## Prerequisites

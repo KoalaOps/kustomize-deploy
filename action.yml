@@ -53,6 +53,9 @@ inputs:
     description: 'Timeout for waiting on deployments (seconds)'
     required: false
     default: '120'
+  env_patches:
+    description: 'Environment file patches (JSON format matching patch-env-files, e.g., {"container.env":{"SENTRY_RELEASE":"v1.2.3"}})'
+    required: false
 
 outputs:
   mode:
@@ -99,6 +102,7 @@ runs:
           deployment-timestamp=${{ github.event.head_commit.timestamp || github.run_id }}
           deployment-id=${{ inputs.run_id || github.run_id }}
           build.run.url=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        env_patches: ${{ inputs.env_patches }}
     
     - name: Inspect kustomization
       id: inspect
