@@ -145,6 +145,15 @@ runs:
           echo "mode=${{ steps.detect.outputs.mode }}" >> $GITHUB_OUTPUT
         fi
     
+    - name: Deployment plan summary
+      shell: bash
+      run: |
+        KUSTOMIZE_BUILD_RESULT=$(kustomize build)
+        echo "--- Deployment plan summary ---"
+        echo "Deployment mode: ${{ steps.mode.outputs.mode }}"
+        echo "KUSTOMIZE_BUILD_RESULT=$KUSTOMIZE_BUILD_RESULT"
+        echo "--- Deployment plan summary ---"
+        
     # GitOps path: commit changes
     - name: Commit changes for GitOps
       if: ${{ steps.mode.outputs.mode == 'gitops' }}
