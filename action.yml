@@ -147,6 +147,7 @@ runs:
     
     - name: Deployment plan summary
       shell: bash
+      working-directory: ${{ inputs.working_directory }}/${{ inputs.overlay_dir }}
       run: |
         KUSTOMIZE_BUILD_RESULT=$(kustomize build)
         echo "--- Deployment plan summary ---"
