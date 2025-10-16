@@ -12,6 +12,19 @@ High-level deployment action that handles both GitOps (ArgoCD) and direct kubect
 
 ## Usage
 
+### Single image deployment (recommended - separate image and tag)
+```yaml
+- name: Deploy to Kubernetes
+  uses: KoalaOps/kustomize-deploy@v1
+  with:
+    overlay_dir: deploy/overlays/production
+    service_name: backend
+    image: myregistry.io/backend
+    tag: v1.2.3
+    environment: production
+```
+
+### Single image (backwards compatible - image:tag format)
 ```yaml
 - name: Deploy to Kubernetes
   uses: KoalaOps/kustomize-deploy@v1
@@ -22,6 +35,21 @@ High-level deployment action that handles both GitOps (ArgoCD) and direct kubect
     environment: production
 ```
 
+### Multiple images deployment
+```yaml
+- name: Deploy service with migrator
+  uses: KoalaOps/kustomize-deploy@v1
+  with:
+    overlay_dir: deploy/overlays/production
+    service_name: backend
+    images_json: |
+      [
+        {"name": "myregistry.io/backend", "newTag": "v1.2.3"},
+        {"name": "myregistry.io/backend-migrator", "newTag": "v1.2.3"}
+      ]
+    environment: production
+```
+
 ## Inputs
 
 | Input | Description | Required | Default |
@@ -29,7 +57,9 @@ High-level deployment action that handles both GitOps (ArgoCD) and direct kubect
 | `working_directory` | Working directory for operations | ❌ | '.' |
 | `overlay_dir` | Path to kustomize overlay directory | ✅ | - |
 | `service_name` | Service name | ✅ | - |
-| `image` | Full image with tag | ✅ | - |
+| `image` | Container image name | ❌* | - |
+| `tag` | Image tag | ❌* | - |
+| `images_json` | Multiple images as JSON array | ❌* | - |
 | `environment` | Environment name | ✅ | - |
 | `actor` | User deploying | ❌ | `${{ github.actor }}` |
 | `run_id` | Run ID for tracking | ❌ | `${{ github.run_id }}` |
@@ -39,6 +69,11 @@ High-level deployment action that handles both GitOps (ArgoCD) and direct kubect
 | `create_namespace` | Create namespace if it does not exist | ❌ | `true` |
 | `wait_timeout` | Timeout for waiting on deployments (seconds) | ❌ | `120` |
 | `env_patches` | Environment file patches (JSON format) | ❌ | - |
+
+\* **Image input options** (choose one):
+  - Option 1: `image` (with embedded tag, e.g., `registry.io/app:v1.2.3`)
+  - Option 2: `image` + `tag` (separate, e.g., `image: registry.io/app`, `tag: v1.2.3`)
+  - Option 3: `images_json` (for multiple images)
 
 ## Outputs
 
@@ -51,36 +86,51 @@ High-level deployment action that handles both GitOps (ArgoCD) and direct kubect
 
 ## How It Works
 
+This action acts as an **orchestrator** that delegates to specialized sub-actions:
+
 ### 1. Update Phase
-- Uses kustomize-edit to set image tag
-- Updates version label
-- Adds deployment metadata (last-deployed-by, deployment-id, etc.)
+- **kustomize-edit** validates and normalizes all image inputs (handles image:tag format, separate params, or multi-image JSON)
+- Sets image tags, version labels, and deployment metadata
 - Patches environment variables in config files (if env_patches provided)
 
 ### 2. Inspection Phase
-- Uses kustomize-inspect to extract namespace and workloads
+- **kustomize-inspect** extracts namespace and workloads from kustomization
 - Gets primary deployment name
 - Validates kustomization builds successfully
 
 ### 3. Detection Phase
+- Detects deployment mode by checking for GitOps labels:
 ```yaml
-# Checks for ArgoCD management
-app.kubernetes.io/managed-by: argocd
+app.kubernetes.io/managed-by: argocd  # or flux
 ```
 
 ### 4. Deploy Phase
 
 **GitOps Mode:**
 - Commits changes to git
-- Pushes to trigger ArgoCD sync
+- Pushes to trigger ArgoCD/Flux sync
 
 **Kubectl Mode:**
-- Applies manifests to cluster
+- **kustomize-apply** applies manifests to cluster
 - Waits for rollout to complete
+
+> **Architecture Note:** This action focuses on deployment orchestration. All image input handling (validation, normalization, format conversion) is delegated to `kustomize-edit`, ensuring a single source of truth.
 
 ## Examples
 
-### Auto-detect mode (recommended)
+### Auto-detect mode (recommended - separate image and tag)
+```yaml
+- name: Deploy service
+  uses: KoalaOps/kustomize-deploy@v1
+  with:
+    overlay_dir: deploy/overlays/${{ inputs.environment }}
+    service_name: ${{ inputs.service }}
+    image: ${{ inputs.registry }}/${{ inputs.service }}
+    tag: ${{ inputs.tag }}
+    environment: ${{ inputs.environment }}
+```
+
+### Auto-detect mode (backwards compatible - image:tag format)
 ```yaml
 - name: Deploy service
   uses: KoalaOps/kustomize-deploy@v1
@@ -98,7 +148,8 @@ app.kubernetes.io/managed-by: argocd
   with:
     overlay_dir: deploy/overlays/production
     service_name: backend
-    image: myregistry.io/backend:v1.2.3
+    image: myregistry.io/backend
+    tag: v1.2.3
     environment: production
     force_mode: gitops
     commit_message: "Deploy backend v1.2.3 to production"
@@ -111,7 +162,8 @@ app.kubernetes.io/managed-by: argocd
   with:
     overlay_dir: deploy/overlays/staging
     service_name: frontend
-    image: myregistry.io/frontend:latest
+    image: myregistry.io/frontend
+    tag: latest
     environment: staging
     force_mode: kubectl
     wait_timeout: 300
@@ -124,7 +176,8 @@ app.kubernetes.io/managed-by: argocd
   with:
     overlay_dir: deploy/overlays/feature
     service_name: api
-    image: myregistry.io/api:feature-123
+    image: myregistry.io/api
+    tag: feature-123
     environment: feature-123
     create_namespace: true
 ```
@@ -136,7 +189,8 @@ app.kubernetes.io/managed-by: argocd
   with:
     overlay_dir: deploy/overlays/production
     service_name: backend
-    image: myregistry.io/backend:v1.2.3
+    image: myregistry.io/backend
+    tag: v1.2.3
     environment: production
     env_patches: |
       {
@@ -145,6 +199,96 @@ app.kubernetes.io/managed-by: argocd
           "BUILD_ID": "${{ github.run_id }}"
         }
       }
+```
+
+### With multiple images (e.g., app + migrator)
+```yaml
+- name: Deploy service with migrator
+  uses: KoalaOps/kustomize-deploy@v1
+  with:
+    overlay_dir: deploy/overlays/production
+    service_name: backend
+    images_json: |
+      [
+        {"name": "myregistry.io/backend", "newTag": "v1.2.3"},
+        {"name": "myregistry.io/backend-migrator", "newTag": "v1.2.3"}
+      ]
+    environment: production
+```
+
+### Real-world example: Service with database migrations
+```yaml
+- name: Deploy API with DB migrator
+  uses: KoalaOps/kustomize-deploy@v1
+  with:
+    overlay_dir: deploy/overlays/production
+    service_name: api
+    images_json: |
+      [
+        {"name": "europe-docker.pkg.dev/myproject/api", "newTag": "${{ github.sha }}"},
+        {"name": "europe-docker.pkg.dev/myproject/api-migrator", "newTag": "${{ github.sha }}"}
+      ]
+    environment: production
+    env_patches: |
+      {
+        "container.env": {
+          "SENTRY_RELEASE": "${{ github.sha }}",
+          "DEPLOYMENT_ID": "${{ github.run_id }}"
+        }
+      }
+```
+
+## Multiple Images Support
+
+The `images_json` input allows you to deploy services with multiple container images in a single deployment. This is useful for:
+
+- **Database migrations**: Deploy your app alongside a migrator image that runs as an init container or Job
+- **Sidecar containers**: Update multiple images that run together in the same pod
+- **Multi-container services**: Services with multiple containers (e.g., app + proxy, app + logging agent)
+
+### Format
+
+The `images_json` input expects a JSON array:
+
+```json
+[
+  {
+    "name": "registry.io/app",
+    "newTag": "v1.2.3"
+  },
+  {
+    "name": "registry.io/app-migrator",
+    "newTag": "v1.2.3"
+  }
+]
+```
+
+**Required fields:**
+- `name` - Full image name/repository (e.g., `gcr.io/project/image`)
+- `newTag` - Tag to deploy (e.g., `v1.2.3`, `latest`, `sha-abc123`)
+
+**Mutual Exclusivity:**
+Provide either `images_json` OR `image` (with or without tag), not both. Input validation is handled by the underlying `kustomize-edit` action.
+
+### Common Pattern: Service + Migrator
+
+Many services follow this pattern:
+1. Build both `myapp` and `myapp-migrator` images with the same tag
+2. Deploy both with `images_json`
+3. Migrator runs as Kubernetes Job or init container before the main app starts
+
+```yaml
+- name: Deploy with migrator
+  uses: KoalaOps/kustomize-deploy@v1
+  with:
+    overlay_dir: deploy/overlays/${{ inputs.environment }}
+    service_name: ${{ inputs.service }}
+    images_json: |
+      [
+        {"name": "registry.io/${{ inputs.service }}", "newTag": "${{ inputs.tag }}"},
+        {"name": "registry.io/${{ inputs.service }}-migrator", "newTag": "${{ inputs.tag }}"}
+      ]
+    environment: ${{ inputs.environment }}
 ```
 
 ## Prerequisites
@@ -161,8 +305,9 @@ app.kubernetes.io/managed-by: argocd
 ## Error Handling
 
 The action will fail if:
-- Overlay directory doesn't exist
-- Kustomization.yaml is invalid
+- Overlay directory doesn't exist or is missing kustomization.yaml
+- Invalid image inputs (validated by kustomize-edit)
+- Kustomization build fails (invalid manifests)
 - Git push fails (GitOps mode)
 - Kubectl apply fails (kubectl mode)
 - Deployment doesn't become ready within timeout
@@ -171,6 +316,9 @@ The action will fail if:
 
 - Always use with cloud-login action for kubectl mode
 - GitOps mode requires repository write permissions
-- Image format must be `registry/repository:tag`
+- **Image format options:**
+  - Single image with embedded tag: `image: registry.io/app:v1.2.3` (backwards compatible)
+  - Single image with separate tag: `image: registry.io/app` + `tag: v1.2.3` (recommended)
+  - Multiple images: `images_json` with array of `{"name":"...","newTag":"..."}`
 - Supports both Deployment and Rollout resources
   
