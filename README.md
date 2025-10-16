@@ -173,3 +173,4 @@ The action will fail if:
 - GitOps mode requires repository write permissions
 - Image format must be `registry/repository:tag`
 - Supports both Deployment and Rollout resources
+  
