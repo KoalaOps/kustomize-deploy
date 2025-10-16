@@ -18,11 +18,14 @@ inputs:
     description: 'Service name'
     required: true
   image:
-    description: 'Container image name/repository (e.g., ghcr.io/koalaops/myapp)'
-    required: true
+    description: 'Container image (e.g., registry.io/app or registry.io/app:v1.2.3)'
+    required: false
   tag:
-    description: 'Image tag (e.g., v1.2.3, latest, main-20240915)'
-    required: true
+    description: 'Image tag (e.g., v1.2.3, latest, sha-abc123)'
+    required: false
+  images_json:
+    description: 'Multiple images as JSON array: [{"name":"registry.io/app","newTag":"v1.2.3"}]'
+    required: false
   environment:
     description: 'Environment name'
     required: true
@@ -84,18 +87,19 @@ runs:
           echo "::error::Overlay directory not found: ${{ inputs.working_directory }}/${{ inputs.overlay_dir }}"
           exit 1
         fi
-        
+
         if [ ! -f "${{ inputs.working_directory }}/${{ inputs.overlay_dir }}/kustomization.yaml" ]; then
           echo "::error::No kustomization.yaml found in overlay directory"
           exit 1
         fi
-    
+
     - name: Update kustomize manifests
       uses: KoalaOps/kustomize-edit@v1
       with:
         overlay_dir: ${{ inputs.working_directory }}/${{ inputs.overlay_dir }}
         image: ${{ inputs.image }}
         tag: ${{ inputs.tag }}
+        images_json: ${{ inputs.images_json }}
         version_label: ${{ inputs.tag }}
         annotations: |
           last-deployed-by=${{ inputs.actor || github.actor }}
@@ -144,7 +148,16 @@ runs:
         else
           echo "mode=${{ steps.detect.outputs.mode }}" >> $GITHUB_OUTPUT
         fi
-    
+
+    - name: Deployment context
+      shell: bash
+      run: |
+        echo "=================================================="
+        echo "🎯 Environment: ${{ inputs.environment }}"
+        echo "📁 Overlay: ${{ inputs.overlay_dir }}"
+        echo "🚀 Mode: ${{ steps.mode.outputs.mode }}"
+        echo "=================================================="
+
     - name: Deployment plan summary
       shell: bash
       working-directory: ${{ inputs.working_directory }}/${{ inputs.overlay_dir }}
@@ -162,7 +175,7 @@ runs:
       with:
         repository: ${{ inputs.working_directory }}
         commit_message: |
-          ${{ inputs.commit_message || format('Deploy {0} {1} to {2} [skip ci]', inputs.service_name, inputs.image, inputs.environment) }}
+          ${{ inputs.commit_message || format('Deploy {0} to {1} [skip ci]', inputs.service_name, inputs.environment) }}
         file_pattern: '${{ inputs.overlay_dir }}/*'
         commit_user_name: GitHub Actions Bot
         commit_user_email: actions@github.com
