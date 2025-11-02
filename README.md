@@ -15,7 +15,7 @@ High-level deployment action that handles both GitOps (ArgoCD) and direct kubect
 ### Single image deployment (recommended - separate image and tag)
 ```yaml
 - name: Deploy to Kubernetes
-  uses: KoalaOps/kustomize-deploy@v1
+  uses: skyhook-io/kustomize-deploy@v1
   with:
     overlay_dir: deploy/overlays/production
     service_name: backend
@@ -27,7 +27,7 @@ High-level deployment action that handles both GitOps (ArgoCD) and direct kubect
 ### Single image (backwards compatible - image:tag format)
 ```yaml
 - name: Deploy to Kubernetes
-  uses: KoalaOps/kustomize-deploy@v1
+  uses: skyhook-io/kustomize-deploy@v1
   with:
     overlay_dir: deploy/overlays/production
     service_name: backend
@@ -38,7 +38,7 @@ High-level deployment action that handles both GitOps (ArgoCD) and direct kubect
 ### Multiple images deployment
 ```yaml
 - name: Deploy service with migrator
-  uses: KoalaOps/kustomize-deploy@v1
+  uses: skyhook-io/kustomize-deploy@v1
   with:
     overlay_dir: deploy/overlays/production
     service_name: backend
@@ -121,7 +121,7 @@ app.kubernetes.io/managed-by: argocd  # or flux
 ### Auto-detect mode (recommended - separate image and tag)
 ```yaml
 - name: Deploy service
-  uses: KoalaOps/kustomize-deploy@v1
+  uses: skyhook-io/kustomize-deploy@v1
   with:
     overlay_dir: deploy/overlays/${{ inputs.environment }}
     service_name: ${{ inputs.service }}
@@ -133,7 +133,7 @@ app.kubernetes.io/managed-by: argocd  # or flux
 ### Auto-detect mode (backwards compatible - image:tag format)
 ```yaml
 - name: Deploy service
-  uses: KoalaOps/kustomize-deploy@v1
+  uses: skyhook-io/kustomize-deploy@v1
   with:
     overlay_dir: deploy/overlays/${{ inputs.environment }}
     service_name: ${{ inputs.service }}
@@ -144,7 +144,7 @@ app.kubernetes.io/managed-by: argocd  # or flux
 ### Force GitOps mode
 ```yaml
 - name: Deploy via GitOps
-  uses: KoalaOps/kustomize-deploy@v1
+  uses: skyhook-io/kustomize-deploy@v1
   with:
     overlay_dir: deploy/overlays/production
     service_name: backend
@@ -158,7 +158,7 @@ app.kubernetes.io/managed-by: argocd  # or flux
 ### Force kubectl mode
 ```yaml
 - name: Direct deployment
-  uses: KoalaOps/kustomize-deploy@v1
+  uses: skyhook-io/kustomize-deploy@v1
   with:
     overlay_dir: deploy/overlays/staging
     service_name: frontend
@@ -172,7 +172,7 @@ app.kubernetes.io/managed-by: argocd  # or flux
 ### With namespace creation
 ```yaml
 - name: Deploy to new namespace
-  uses: KoalaOps/kustomize-deploy@v1
+  uses: skyhook-io/kustomize-deploy@v1
   with:
     overlay_dir: deploy/overlays/feature
     service_name: api
@@ -185,7 +185,7 @@ app.kubernetes.io/managed-by: argocd  # or flux
 ### With environment variable patches
 ```yaml
 - name: Deploy with env patches
-  uses: KoalaOps/kustomize-deploy@v1
+  uses: skyhook-io/kustomize-deploy@v1
   with:
     overlay_dir: deploy/overlays/production
     service_name: backend
@@ -204,7 +204,7 @@ app.kubernetes.io/managed-by: argocd  # or flux
 ### With multiple images (e.g., app + migrator)
 ```yaml
 - name: Deploy service with migrator
-  uses: KoalaOps/kustomize-deploy@v1
+  uses: skyhook-io/kustomize-deploy@v1
   with:
     overlay_dir: deploy/overlays/production
     service_name: backend
@@ -219,7 +219,7 @@ app.kubernetes.io/managed-by: argocd  # or flux
 ### Real-world example: Service with database migrations
 ```yaml
 - name: Deploy API with DB migrator
-  uses: KoalaOps/kustomize-deploy@v1
+  uses: skyhook-io/kustomize-deploy@v1
   with:
     overlay_dir: deploy/overlays/production
     service_name: api
@@ -279,7 +279,7 @@ Many services follow this pattern:
 
 ```yaml
 - name: Deploy with migrator
-  uses: KoalaOps/kustomize-deploy@v1
+  uses: skyhook-io/kustomize-deploy@v1
   with:
     overlay_dir: deploy/overlays/${{ inputs.environment }}
     service_name: ${{ inputs.service }}
